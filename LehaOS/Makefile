@@ -6,7 +6,7 @@ CC := gcc
 LD := ld
 
 CFLAGS := -ffreestanding -fshort-wchar
-LDFLAGS := -T $(LDS) -shared -Bsymbolic -nostdlib
+LDFLAGS := -T $(LDS) -Bsymbolic -nostdlib -static
 
 
 SRCDIR := src

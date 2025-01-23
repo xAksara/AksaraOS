@@ -1,9 +1,11 @@
 LOADER := bootloader
 IMAGE := disk
-
 SRCDIR := src
 OBJDIR := obj
 BINDIR := bin
+
+KERNEL_MAKEFILE_DIR := ../LehaOS
+KERNEL_PATH := ../LehaOS/bin/kernel.elf
 
 
 loader: $(BINDIR)/$(LOADER).efi
@@ -53,10 +55,14 @@ $(OBJDIR)/$(LOADER).o : $(SRCDIR)/$(LOADER).c
       -o $(OBJDIR)/$(LOADER).o
 
 
-image: loader $(BINDIR)/startup.nsh
+make_kernel:
+	$(MAKE) -C $(KERNEL_MAKEFILE_DIR) kernel
+
+image: loader make_kernel $(BINDIR)/startup.nsh
 	dd if=/dev/zero of=$(BINDIR)/$(IMAGE).img bs=512 count=93750
 	mformat -i $(BINDIR)/$(IMAGE).img
 	mmd -i $(BINDIR)/$(IMAGE).img ::/EFI
 	mmd -i $(BINDIR)/$(IMAGE).img ::/EFI/BOOT
 	mcopy -i $(BINDIR)/$(IMAGE).img $(BINDIR)/$(LOADER).efi ::/EFI/BOOT
 	mcopy -i $(BINDIR)/$(IMAGE).img $(BINDIR)/startup.nsh ::
+	mcopy -i $(BINDIR)/$(IMAGE).img $(KERNEL_PATH) ::
