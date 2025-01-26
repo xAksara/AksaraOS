@@ -4,9 +4,12 @@ SRCDIR := src
 OBJDIR := obj
 BINDIR := bin
 
-KERNEL_MAKEFILE_DIR := ../LehaOS
-KERNEL_PATH := ../LehaOS/bin/kernel.elf
+KERNEL_MAKEFILE_DIR := ../AksaraOS
+KERNEL_PATH := ../AksaraOS/bin/kernel.elf
 
+
+SRCFILES = $(wildcard $(SRCDIR)/*.c)
+OBJFILES = $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SRCFILES))
 
 loader: $(BINDIR)/$(LOADER).efi
 
@@ -24,8 +27,8 @@ $(BINDIR)/$(LOADER).efi : $(OBJDIR)/$(LOADER).so
           $(BINDIR)/$(LOADER).efi
 
 
-$(OBJDIR)/$(LOADER).so : $(OBJDIR)/$(LOADER).o
-	ld $(OBJDIR)/$(LOADER).o                       \
+$(OBJDIR)/$(LOADER).so : $(OBJFILES)
+	ld $(OBJFILES)                \
      /usr/lib/crt0-efi-x86_64.o     \
      -nostdlib                      \
      -znocombreloc                  \
@@ -40,8 +43,8 @@ $(OBJDIR)/$(LOADER).so : $(OBJDIR)/$(LOADER).o
 
 
 
-$(OBJDIR)/$(LOADER).o : $(SRCDIR)/$(LOADER).c
-	gcc $(SRCDIR)/$(LOADER).c           \
+$(OBJDIR)/%.o : $(SRCDIR)/%.c
+	gcc $<           \
       -c                                  \
       -fno-stack-protector                \
       -ffreestanding                      \
@@ -52,7 +55,7 @@ $(OBJDIR)/$(LOADER).o : $(SRCDIR)/$(LOADER).c
       -I /usr/include/efi/x86_64/ 	      \
       -DEFI_FUNCTION_WRAPPER              \
       -DGNU_EFI_USE_MS_ABI                \
-      -o $(OBJDIR)/$(LOADER).o
+      -o $@
 
 
 make_kernel:
