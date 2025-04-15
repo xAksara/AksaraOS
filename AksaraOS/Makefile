@@ -5,7 +5,10 @@ CC := gcc
 AS := as
 LD := ld
 
-CFLAGS := -ffreestanding -fshort-wchar -g -nostdlib -mcmodel=large
+CFLAGS := -ffreestanding -fshort-wchar -g -nostdlib -mcmodel=large \
+					-I /usr/include/efi        		\
+      		-I /usr/include/efi/x86_64/
+					
 LDFLAGS := -T $(LDS) -Bsymbolic -nostdlib -static -g -z max-page-size=4096
 ASFLAGS := --64 -Iinc/ -g
 
@@ -15,9 +18,9 @@ KERN_SRCDIR := $(SRCDIR)/kern
 KERN_OBJDIR := $(OBJDIR)/kern
 BINDIR := bin
 
-KERN_SRCFILES := $(KERN_SRCDIR)/kernel.c \
-                 $(KERN_SRCDIR)/bootstrap.S \
-								 $(KERN_SRCDIR)/entry.S
+KERN_SRCFILES := $(KERN_SRCDIR)/bootstrap.S \
+								 $(KERN_SRCDIR)/entry.S			\
+								 $(KERN_SRCDIR)/kernel.c
 
 KERN_OBJFILES := $(patsubst $(KERN_SRCDIR)/%.c,$(KERN_OBJDIR)/%.o,$(filter %.c,$(KERN_SRCFILES)))
 KERN_OBJFILES += $(patsubst $(KERN_SRCDIR)/%.S,$(KERN_OBJDIR)/%.o,$(filter %.S,$(KERN_SRCFILES)))

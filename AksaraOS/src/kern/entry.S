@@ -7,21 +7,16 @@
 
 .globl entry
 entry:
-    # Set up kernel stack
     leaq bootstacktop(%rip),%rsp
     xor %ebp, %ebp
 
-    # Save LoadParams in uefi_lp.
-    movq %rcx, uefi_lp(%rip)
+    movq %rdi, LoaderParams(%rip)
 
-    # Invoke C code
     call kernel_main
-    # Should never reach this place
     jmp .
 
 .data
 
-# Allocate boot stack forcing page alignment.
 .p2align PAGE_SHIFT
 .globl bootstack
 bootstack:
@@ -30,6 +25,6 @@ bootstack:
 bootstacktop:
 
 
-.globl uefi_lp
-uefi_lp:
+.globl LoaderParams
+LoaderParams:
 .quad 0

@@ -1,9 +1,8 @@
-/* Исправленный скрипт */
 ENTRY(_head64)
 OUTPUT_FORMAT(elf64-x86-64)
 
-KERN_VIRT_BASE = 0xFFFFFFFF80000000;  /* Виртуальный адрес ядра */
-KERN_PHYS_START = 0x100000;           /* Физический адрес загрузки */
+KERN_VIRT_BASE = 0xFFFFFFFF80000000;  
+KERN_PHYS_START = 0x100000;          
 
 SECTIONS {
     . = KERN_PHYS_START;
@@ -12,7 +11,7 @@ SECTIONS {
         obj/kern/bootstrap.o (.text .data .bss)
     }
 
-    . += KERN_VIRT_BASE;  /* Переход к виртуальным адресам */
+    . += KERN_VIRT_BASE;
     
     .text ALIGN(4K) : AT(ADDR(.text) - KERN_VIRT_BASE) {
         *(.text .text.*)
@@ -29,10 +28,6 @@ SECTIONS {
     .bss ALIGN(4K) : {
         *(COMMON)
         *(.bss .bss.*)
-        . = ALIGN(4K);
-        bootstacktop = .;
-        . += 64K;
-        bootstack = .;
     }
     
     /DISCARD/ : {

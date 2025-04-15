@@ -5,6 +5,28 @@
 #define KERNEL_VIRTUAL_BASE 0xFFFFFFFF80000000
 #define KERNEL_PHYS_START  0x100000
 
+typedef struct {
+  EFI_VIRTUAL_ADDRESS      SelfVirtual;
+
+
+  EFI_VIRTUAL_ADDRESS      RTServices;                  // UEFI Runtime Services
+  EFI_PHYSICAL_ADDRESS     ACPIRoot;                    // ACPI RSDP Table.
+
+
+  UINT32                   MemoryMapDescriptorVersion;  // The memory descriptor version
+  UINT64                   MemoryMapDescriptorSize;     // The size of an individual memory descriptor
+  EFI_PHYSICAL_ADDRESS     MemoryMap;                   // The system memory map as an array of EFI_MEMORY_DESCRIPTOR structs
+  EFI_VIRTUAL_ADDRESS      MemoryMapVirt;               // Virtual address of memmap
+  UINT64                   MemoryMapSize;               // The total size of the system memory map
+
+
+  EFI_PHYSICAL_ADDRESS     FrameBufferBase;
+  UINT32                   FrameBufferSize;
+  UINT32                   PixelsPerScanLine;
+  UINT32                   VerticalResolution;
+  UINT32                   HorizontalResolution;
+} LOADER_PARAMS;
+
 EFI_STATUS
 LoadFile(
 	IN EFI_FILE						*Directory,
@@ -15,7 +37,6 @@ LoadFile(
 	)
 {
 	EFI_STATUS 											Status;
-	// EFI_FILE												*ResultFile;
 	EFI_LOADED_IMAGE_PROTOCOL				*LoadedImage;
 	EFI_SIMPLE_FILE_SYSTEM_PROTOCOL	*FileSystem;
 	
@@ -79,6 +100,7 @@ ReadKernel(
 		Print(L"Error: Unable to get kernel info size. Status: %r\n", Status);
 		return Status;
 	}
+	SystemTable->BootServices->FreePool(FileInfo);
 
 	Size = sizeof(ElfHeader);
 	Status = (*Kernel)->Read(*Kernel, &Size, &ElfHeader);
@@ -92,7 +114,6 @@ ReadKernel(
 	)
 	{
 		Print(L"Error: Bad kernel ELF header.\n");
-		SystemTable->BootServices->FreePool(FileInfo);
 		return EFI_ABORTED;
 	}
 	Print(L"Kernel ELF header succefully verified.\n");
@@ -108,13 +129,11 @@ ReadKernel(
 	Status = SystemTable->BootServices->AllocatePool(EfiLoaderData, Size, (void**)&Phdrs);
 	if (EFI_ERROR(Status)) {
 		Print(L"Error: Unable to allocate pool for program headers table. Status: %r\n", Status);
-		SystemTable->BootServices->FreePool(FileInfo);
 		return Status;
 	}
 	Status = (*Kernel)->Read(*Kernel, &Size, Phdrs);
 	if (EFI_ERROR(Status)) {
 		Print(L"Error: Unable to read Program Headers Table. Status: %r\n", Status);
-		SystemTable->BootServices->FreePool(FileInfo);
 		SystemTable->BootServices->FreePool(Phdrs);
 		return Status;
 	}
@@ -125,7 +144,6 @@ ReadKernel(
 
 	for (Elf64_Phdr *Phdr = Phdrs; Phdr < Phdrs + ElfHeader.e_phnum; Phdr++) {
 		if (Phdr->p_type == PT_LOAD) {
-			Print(L"Found PT_LOAD.\n");
 			MinAddress = MinAddress < Phdr->p_paddr ? MinAddress : Phdr->p_paddr;
 			MaxAddress = MaxAddress > Phdr->p_paddr + Phdr->p_memsz ? MaxAddress : Phdr->p_paddr + Phdr->p_memsz;
 		}
@@ -138,7 +156,6 @@ ReadKernel(
 	Status = SystemTable->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, EFI_SIZE_TO_PAGES(KernelSize), &MinAddress);
 	if (EFI_ERROR(Status)) {
 		Print(L"Error: Unable to allocate kernel memory. Status: %r\n", Status);
-		SystemTable->BootServices->FreePool(FileInfo);
 		SystemTable->BootServices->FreePool(Phdrs);
 		return Status;
 	}
@@ -150,7 +167,6 @@ ReadKernel(
 			Status = (*Kernel)->SetPosition(*Kernel, Phdr->p_offset);
 			if (EFI_ERROR(Status)) {
 				Print(L"Error: Unable to set position to Program Headers Table. Status: %r\n", Status);
-				SystemTable->BootServices->FreePool(FileInfo);
 				SystemTable->BootServices->FreePool(Phdrs);
 				SystemTable->BootServices->FreePages(MinAddress, EFI_SIZE_TO_PAGES(KernelSize));
 				return Status;
@@ -158,7 +174,6 @@ ReadKernel(
 			Status = (*Kernel)->Read(*Kernel, &Phdr->p_filesz, (void*)Phdr->p_paddr);
 			if (EFI_ERROR(Status)) {
 				Print(L"Error: Unable to load file into memory. Status: %r\n", Status);
-				SystemTable->BootServices->FreePool(FileInfo);
 				SystemTable->BootServices->FreePool(Phdrs);
 				SystemTable->BootServices->FreePages(MinAddress, EFI_SIZE_TO_PAGES(KernelSize));
 				return Status;
@@ -168,42 +183,49 @@ ReadKernel(
 	return EFI_SUCCESS;
 }
 
-typedef struct {
-  ///
-  /// Virtual pointer to self.
-  ///
-  EFI_VIRTUAL_ADDRESS      SelfVirtual;
 
-  ///
-  /// UEFI services and configuration.
-  ///
-  EFI_VIRTUAL_ADDRESS      RTServices;                  // UEFI Runtime Services
-  EFI_PHYSICAL_ADDRESS     ACPIRoot;                    // ACPI RSDP Table.
-
-  ///
-  /// Memory mapping
-  ///
-  UINT32                   MemoryMapDescriptorVersion;  // The memory descriptor version
-  UINT64                   MemoryMapDescriptorSize;     // The size of an individual memory descriptor
-  EFI_PHYSICAL_ADDRESS     MemoryMap;                   // The system memory map as an array of EFI_MEMORY_DESCRIPTOR structs
-  EFI_VIRTUAL_ADDRESS      MemoryMapVirt;               // Virtual address of memmap
-  UINT64                   MemoryMapSize;               // The total size of the system memory map
-
-  ///
-  /// Graphics information.
-  ///
-  EFI_PHYSICAL_ADDRESS     FrameBufferBase;
-  UINT32                   FrameBufferSize;
-  UINT32                   PixelsPerScanLine;
-  UINT32                   VerticalResolution;
-  UINT32                   HorizontalResolution;
-
-	uint64_t phys_mem_start;
-	uint64_t phys_mem_end;
-	uint64_t kernel_phys_start;
-	uint64_t kernel_phys_end;
-
-} LOADER_PARAMS;
+EFI_STATUS
+InitGraphics(
+	IN	EFI_SYSTEM_TABLE 	*SystemTable,
+	OUT LOADER_PARAMS  		*LoaderParams
+) {
+	EFI_STATUS										Status;
+	EFI_GRAPHICS_OUTPUT_PROTOCOL 	*GOP;
+	EFI_GRAPHICS_OUTPUT_BLT_PIXEL Colour = {0xff, 0x0f, 0x0f, 0x0f};
+	
+	Status = SystemTable->BootServices->HandleProtocol(SystemTable->ConsoleOutHandle, &gEfiGraphicsOutputProtocolGuid, (void**)&GOP);
+	if (EFI_ERROR (Status)) {
+    Status = SystemTable->BootServices->LocateProtocol (
+      &gEfiGraphicsOutputProtocolGuid,
+      NULL,
+      (void**)&GOP
+      );
+  }
+  if (EFI_ERROR(Status)) {
+			Print(L"Error: Unable to Locate Protocol (GOP). Status: %r\n", Status);
+			return Status;
+	}
+	Print(L"Base: 0x%x\n\rSize: 0x%x\n\rPixelsPerScanline: %d\n\rWidth: %d\n\rHeight: %d\n\r", 
+		GOP->Mode->FrameBufferBase, 
+		GOP->Mode->FrameBufferSize,
+		GOP->Mode->Info->PixelsPerScanLine,
+		GOP->Mode->Info->HorizontalResolution, 
+		GOP->Mode->Info->VerticalResolution
+		);
+		unsigned y = 50;
+    unsigned BBP = 4;
+    uint32_t temp = GOP->Mode->Info->HorizontalResolution;
+    // for(unsigned x = 0; x < GOP->Mode->Info->HorizontalResolution / 2 * BBP; ++x) {
+      // unsigned* pix = (unsigned *)((x + y * LoaderParams->PixelsPerScanLine) * BBP + LoaderParams->FrameBufferBase);
+      // *pix = 0xffffffff;
+			*(unsigned int*)((y*GOP->Mode->Info->PixelsPerScanLine*BBP)+GOP->Mode->FrameBufferBase) = 0xffffffff;
+    // }
+	LoaderParams->FrameBufferBase      = GOP->Mode->FrameBufferBase;
+  LoaderParams->FrameBufferSize      = GOP->Mode->FrameBufferSize;
+  LoaderParams->PixelsPerScanLine    = GOP->Mode->Info->PixelsPerScanLine;
+  LoaderParams->HorizontalResolution = GOP->Mode->Info->HorizontalResolution;
+  LoaderParams->VerticalResolution   = GOP->Mode->Info->VerticalResolution;
+}
 
 EFI_STATUS
 AllocateMemoryMap(
@@ -240,9 +262,9 @@ AllocateMemoryMap(
 		// 					Descriptor->Type, Descriptor->PhysicalStart, Descriptor->NumberOfPages);
 		// 		Descriptor = (EFI_MEMORY_DESCRIPTOR*)((UINT8*)Descriptor + DescriptorSize);
 		// }
-		LoaderParams->MemoryMap = MMap;
+		LoaderParams->MemoryMap = (EFI_PHYSICAL_ADDRESS)MMap;
 		LoaderParams->MemoryMapSize = MSize;
-		LoaderParams->MemoryMapVirt = MMap;
+		LoaderParams->MemoryMapVirt = (EFI_VIRTUAL_ADDRESS)MMap;
 		LoaderParams->MemoryMapDescriptorSize = DescriptorSize;
 		LoaderParams->MemoryMapDescriptorVersion = DescriptorVersion;
 		*MemoryMapKey = MKey;
@@ -255,7 +277,7 @@ AllocateMemoryMap(
 
 
 typedef 
-int __attribute__((sysv_abi)) 
+void __attribute__((sysv_abi)) 
 (*KERNEL_ENTRY)(LOADER_PARAMS *);
 
 INT64
@@ -263,25 +285,20 @@ JumpKernel(
 	IN EFI_SYSTEM_TABLE				*SystemTable,
 	IN EFI_HANDLE 						ImageHandle,
 	IN EFI_FILE_PROTOCOL			**Kernel,
-	IN UINTN 									EntryPoint
+	IN UINTN 									EntryPoint,
+	LOADER_PARAMS 						*LoaderParams,
+	IN UINTN									*MemoryMapKey
 	)
 {
 	EFI_STATUS Status;
-	LOADER_PARAMS LoaderParams;
-	UINTN MemoryMapKey = 0;
-	Print(L"Entry address: 0x%lx\n", EntryPoint);
-	if (AllocateMemoryMap(SystemTable, &LoaderParams, &MemoryMapKey) == EFI_SUCCESS) {
-		KERNEL_ENTRY KernelEntry = (KERNEL_ENTRY)(EntryPoint);
-		Status = SystemTable->BootServices->ExitBootServices(ImageHandle, MemoryMapKey);
-		if (EFI_ERROR(Status)) {
-			return -2;
-		}
-		// Print(L"Exit BS: %r\n", Status);
-		(INT64)KernelEntry(&LoaderParams);
-		return 1;
-	} else {
-		return -1;
+	KERNEL_ENTRY KernelEntry = (KERNEL_ENTRY)(EntryPoint);
+	Status = SystemTable->BootServices->ExitBootServices(ImageHandle, *MemoryMapKey);
+	if (EFI_ERROR(Status)) {
+		Print(L"Exit BS: %r\n", Status);
+		return -2;
 	}
+	KernelEntry(LoaderParams);
+	return 1; // сюда не должны дойти
 }
 
 EFI_STATUS
@@ -290,9 +307,13 @@ efi_main (
 	IN EFI_SYSTEM_TABLE 	*SystemTable
 	)
 {
-	EFI_STATUS Status;
-	EFI_FILE *Kernel = NULL;
-	UINTN EntryPoint;
+	EFI_STATUS 			Status;
+	EFI_FILE 				*Kernel = NULL;
+	UINTN 					EntryPoint;
+	UINTN						MemoryMapKey;
+	LOADER_PARAMS 	*LoaderParams;
+
+
 
 	InitializeLib(ImageHandle, SystemTable);
 	Print(L"Hello from loader!\n\r");
@@ -308,9 +329,26 @@ efi_main (
 		Print(L"Error: Unable to read kernel. Status: %r\n", Status);
 		return EFI_ABORTED;
 	}
-	Print(L"Readed\n");
-	Print(L"JUMP!!!!\n%d\n", JumpKernel(SystemTable, ImageHandle, &Kernel, EntryPoint));
-	
-
-  return EFI_SUCCESS;
+	Status = SystemTable->BootServices->AllocatePool(EfiLoaderData, sizeof(LOADER_PARAMS), (void **)&LoaderParams);
+	if (EFI_ERROR(Status)) {
+		Print(L"Error: Unable to allocate pool for LoaderParams. Status: %r\n", Status);
+		return EFI_ABORTED;
+	}
+	Print(L"Loader Params allocated in 0x%lx\n", LoaderParams);
+	Status = InitGraphics(SystemTable, LoaderParams);
+	if (EFI_ERROR(Status)) {
+		Print(L"Error: Unable to Init Graphics. Status: %r\n", Status);
+		SystemTable->BootServices->FreePool(LoaderParams);
+		return EFI_ABORTED;
+	}
+	// Поле этого нельзя будет делать Print, иначе EBS ругается. 
+	Status = AllocateMemoryMap(SystemTable, LoaderParams, &MemoryMapKey);
+	if (EFI_ERROR(Status)) {
+		Print(L"Error: Unable to Allocate Memory Map. Status: %r\n", Status);
+		SystemTable->BootServices->FreePool(LoaderParams);
+		return EFI_ABORTED;
+	}
+	JumpKernel(SystemTable, ImageHandle, &Kernel, EntryPoint, LoaderParams, &MemoryMapKey);
+	SystemTable->BootServices->FreePool(LoaderParams);
+  return EFI_ABORTED;
 }
